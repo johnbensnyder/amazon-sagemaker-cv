@@ -24,12 +24,21 @@ class TwoStageDetector(tf.keras.models.Model):
                  backbone,
                  neck,
                  dense_head,
-                 roi_head):
+                 roi_head,
+                 dist=None,
+                 fp16=False,
+                 global_gradient_clip_ratio=0.0,
+                 weight_decay=0.0):
         super(TwoStageDetector, self).__init__()
         self.backbone = backbone
         self.neck = neck
         self.rpn_head = dense_head
         self.roi_head = roi_head
+        self.dist = self.initialize_dist(dist)
+        self.fp16 = fp16
+        self.global_gradient_clip_ratio = global_gradient_clip_ratio
+        self.weight_decay = weight_decay
+        self.broadcast = True
     
     def call(self, features, labels=None, training=True, weight_decay=0.0):
         x = self.backbone(features['images'], training=training)
@@ -64,6 +73,63 @@ class TwoStageDetector(tf.keras.models.Model):
                     ])
         loss_dict['total_loss'] = sum(loss_dict.values())
         return loss_dict
+     
+    def train_step(self, data):
+        with tf.GradientTape() as tape:
+            model_outputs = self(*data_batch, training=True, weight_decay=self.weight_decay)
+            if self.fp16:
+                scaled_loss = self.optimizer.get_scaled_loss(model_outputs['total_loss'])
+        if self.dist!=None:
+            tape = self.dist.DistributedGradientTape(tape)
+        if self.fp16:
+            scaled_gradients = tape.gradient(scaled_loss, self.trainable_variables)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+        else:
+            gradients = tape.gradient(model_outputs['total_loss'], self.trainable_variables)
+        if self.global_gradient_clip_ratio > 0.0:
+            all_are_finite = tf.reduce_all([tf.reduce_all(tf.math.is_finite(g)) for g in gradients])
+            (clipped_grads, _) = tf.clip_by_global_norm(gradients, 
+                                                        clip_norm=self.global_gradient_clip_ratio,
+                                                        use_norm=tf.cond(all_are_finite, 
+                                                        lambda: tf.linalg.global_norm(gradients), 
+                                                        lambda: tf.constant(1.0)))
+            gradients = clipped_grads
+        grads_and_vars = []
+        for grad, var in zip(gradients, self.trainable_variables):
+            if grad is not None and any([pattern in var.name for pattern in ["bias", "beta"]]):
+                grad = 2.0 * grad
+            grads_and_vars.append((grad, var))
+        self.optimizer.apply_gradients(grads_and_vars)
+        if self.dist!=None and self.broadcast:
+            if MPI_rank()==0:
+                logging.info("Broadcasting model")
+            self.dist.broadcast_variables(self.variables, 0)
+            self.dist.broadcast_variables(self.optimizer.variables(), 0)
+            self.broadcast = False
+        losses = {i:j for i,j in model_outputs.items() if "loss" in i}
+        model_outputs.update({
+            'source_ids': data_batch[0]['source_ids'],
+            'image_info': data_batch[0]['image_info'],
+        })
+        return losses, model_outputs
+    
+    def initialize_dist(self, dist):
+        if dist is None:
+            return
+        if dist.lower() in ['hvd', 'horovod']:
+            logging.info("Using Horovod For Distributed Training")
+            import horovod.tensorflow as dist
+            dist.init()
+            return dist
+        elif dist.lower() in ['smd', 'sagemaker', 'smddp']:
+            logging.info("Using Sagemaker For Distributed Training")
+            import smdistributed.dataparallel.tensorflow as dist
+            dist.init()
+            return dist
+        else:
+            raise NotImplementedError
+        
+        
     
 @DETECTORS.register("TwoStageDetector")
 def build_two_stage_detector(cfg):

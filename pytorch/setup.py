@@ -1,47 +1,102 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 #!/usr/bin/env python
-import sys
-py_version = f"{sys.version_info.major}{sys.version_info.minor}"
 
+import glob
+import os
+import copy
+import torch
 from setuptools import find_packages
 from setuptools import setup
+from torch.utils.cpp_extension import CUDA_HOME
+from torch.utils.cpp_extension import CppExtension
+from torch.utils.cpp_extension import CUDAExtension
 
-import torch
+requirements = ["torch", "torchvision"]
 
-torch_version = ''.join(torch.__version__.split('.')[:2])
 
-if py_version=="36":
-    pycocotools_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/cocoapi/pycocotools-2.0%2Bnv0.6.0-cp36-cp36m-linux_x86_64.whl"
-    awsio_whl = "https://aws-s3-plugin.s3-us-west-2.amazonaws.com/binaries/0.0.1/93fdaed/awsio-0.0.1-cp36-cp36m-manylinux1_x86_64.whl"
-else:
-    pycocotools_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/cocoapi/pycocotools-2.0%2Bnv0.6.0-cp38-cp38-linux_x86_64.whl"
-    awsio_whl = "https://aws-s3-plugin.s3.us-west-2.amazonaws.com/binaries/0.0.1/1c3e69e/awsio-0.0.1-cp38-cp38-manylinux1_x86_64.whl"
-    
-if torch_version=="16":
-    smcv_utils_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/utils/pt-1.6/smcv_utils-0.0.1-cp36-cp36m-linux_x86_64.whl"
-elif torch_version=="17":
-    smcv_utils_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/utils/pt-1.7/smcv_utils-0.0.1-cp36-cp36m-linux_x86_64.whl"
-elif torch_version=="18":
-    smcv_utils_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/utils/pt-1.8/smcv_utils-0.0.1-cp36-cp36m-linux_x86_64.whl"
-elif torch_version=="19":
-    smcv_utils_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/utils/pt-1.9/smcv_utils-0.0.1-cp38-cp38-linux_x86_64.whl"
-else:
-    # build from source. this will take longer on training startup
-    smcv_utils_whl = "git+https://github.com/aws/amazon-sagemakercv-utils-nvidia.git"
-    
-install_requires = ["yacs", 
-                    "matplotlib",
-                    "mpi4py",
-                    "opencv-python",
-                    f"pycocotools @ {pycocotools_whl}",
-                    f"smcv_utils @ {smcv_utils_whl}",
-                    f"awsio @ {awsio_whl}"]
+def get_extensions():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    extensions_dir = os.path.join(this_dir, "maskrcnn_benchmark", "csrc")
+
+    main_file = glob.glob(os.path.join(extensions_dir, "vision.cpp"))
+    main_file_nhwc = glob.glob(os.path.join(extensions_dir, "cuda/nhwc.cpp"))
+    main_file_syncfree = glob.glob(os.path.join(extensions_dir, "cuda/syncfree.cpp"))
+    source_cpu = glob.glob(os.path.join(extensions_dir, "cpu", "*.cpp"))
+    source_cuda = glob.glob(os.path.join(extensions_dir, "cuda", "*.cu"))
+    source_cuda_nhwc = glob.glob(os.path.join(extensions_dir, "cuda/nhwc", "*.cu"))
+    source_cpp_nhwc = glob.glob(os.path.join(extensions_dir, "cuda/nhwc", "*.cpp"))
+    source_cuda_syncfree = glob.glob(os.path.join(extensions_dir, "cuda/syncfree", "*.cu"))
+    source_cpp_syncfree = glob.glob(os.path.join(extensions_dir, "cuda/syncfree", "*.cpp"))
+
+    sources = main_file + source_cpu
+    sources_nhwc = source_cpp_nhwc + source_cuda_nhwc + main_file_nhwc
+    sources_syncfree = source_cpp_syncfree + source_cuda_syncfree + main_file_syncfree
+    sources_bottleneck = glob.glob(os.path.join(extensions_dir, "cuda/bottleneck", "*.cpp"))
+    extension = CppExtension
+
+    extra_compile_args = {"cxx": []}
+    define_macros = []
+
+    if CUDA_HOME is not None:
+        extension = CUDAExtension
+        sources += source_cuda
+
+        define_macros += [("WITH_CUDA", None)]
+        extra_compile_args["nvcc"] = [
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+            "-DVERSION_GE_1_5",
+            "-O3",
+        ]
+        extra_compile_args["cxx"] = [
+            "-O3",
+        ]
+
+    sources = [os.path.join(extensions_dir, s) for s in sources]
+
+    include_dirs = [extensions_dir, "/opt/pytorch/pytorch/third_party/pybind11/include", "/opt/pytorch/apex/csrc"]
+
+    ext_modules = [
+        extension(
+            "maskrcnn_benchmark._C",
+            sources,
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+            extra_compile_args=extra_compile_args,
+        ),
+        extension("maskrcnn_benchmark.NHWC",
+            sources_nhwc,
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+            extra_compile_args=copy.deepcopy(extra_compile_args),
+        ),
+        extension("maskrcnn_benchmark.Syncfree",
+            sources_syncfree,
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+            extra_compile_args=copy.deepcopy(extra_compile_args),
+        ),
+        extension("maskrcnn_benchmark.Bottleneck",
+            sources_bottleneck,
+            include_dirs=include_dirs + ["/opt/pytorch/apex/apex/contrib/csrc/cudnn-frontend/include"],
+            define_macros=define_macros,
+            extra_compile_args=copy.deepcopy(extra_compile_args),
+        ),
+    ]
+
+    return ext_modules
+
 
 setup(
-    name="sagemakercv",
+    name="maskrcnn_benchmark",
     version="0.1",
-    author="jbsnyder",
-    url="https://github.com/aws-samples/amazon-sagemaker-cv",
-    description="Computer vision in Pytorch with Amazon Sagemaker",
-    packages=find_packages(exclude=("configs", "tests")),
-    install_requires=install_requires,
+    author="fmassa",
+    url="https://github.com/facebookresearch/maskrcnn-benchmark",
+    description="object detection in pytorch",
+    packages=find_packages(exclude=("configs", "tests",)),
+    # install_requires=requirements,
+    ext_modules=get_extensions(),
+    cmdclass={"build_ext": torch.utils.cpp_extension.BuildExtension},
 )
