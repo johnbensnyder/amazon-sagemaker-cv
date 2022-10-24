@@ -6,21 +6,13 @@ py_version = f"{sys.version_info.major}{sys.version_info.minor}"
 from setuptools import find_packages
 from setuptools import setup
 
-if py_version=="37":
-    pycocotools_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/cocoapi/pycocotools-2.0%2Bnv0.6.0-cp37-cp37m-linux_x86_64.whl"
-else:
-    pycocotools_whl = "https://sagemakercv.s3.us-west-2.amazonaws.com/cocoapi/pycocotools-2.0%2Bnv0.6.0-cp38-cp38-linux_x86_64.whl"
-    
-
-install_requires = ["tensorflow_addons",
-                    "tensorflow_datasets",
-                    "yacs",
-                    "matplotlib",
+install_requires = ["yacs",
+                    "s3fs",
                     "mpi4py",
                     "opencv-python",
-                    f"pycocotools @ {pycocotools_whl}"]
+                    "pycocotools @ git+https://github.com/johnbensnyder/cocoapi.git@nvidia/master#subdirectory=PythonAPI"]
 
-
+#pip install 'git+https://github.com/NVIDIA/cocoapi.git@nvidia/master#subdirectory=PythonAPI'
 
 setup(
     name="sagemakercv",

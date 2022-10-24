@@ -22,7 +22,6 @@ from __future__ import division
 from __future__ import print_function
 import functools
 import tensorflow as tf
-import tensorflow_addons as tfa
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.keras import backend
 
@@ -119,7 +118,7 @@ class GNReLULayer(tf.keras.layers.Layer):
             axis = 3
 
         self._local_layers = dict()
-        self._local_layers["groupnorm"] = tfa.layers.GroupNormalization(
+        self._local_layers["groupnorm"] = tf.layers.GroupNormalization(
             axis=axis,
             groups=32,
             epsilon=1e-5,

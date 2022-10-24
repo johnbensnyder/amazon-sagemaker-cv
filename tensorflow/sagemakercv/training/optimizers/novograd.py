@@ -15,10 +15,8 @@
 """NovoGrad for TensorFlow."""
 
 import tensorflow as tf
-from tensorflow_addons.utils.types import FloatTensorLike
 
 from typing import Union, Callable, Optional, List
-from typeguard import typechecked
 import re
 from ..builder import OPTIMIZERS
 
@@ -66,15 +64,14 @@ class NovoGrad(tf.keras.optimizers.Optimizer):
     )
     ```
     """
-
-    @typechecked
+    
     def __init__(
         self,
-        learning_rate: Union[FloatTensorLike, Callable] = 0.001,
-        beta_1: FloatTensorLike = 0.9,
-        beta_2: FloatTensorLike = 0.999,
-        epsilon: FloatTensorLike = 1e-7,
-        weight_decay: FloatTensorLike = 0.0,
+        learning_rate = 0.001,
+        beta_1 = 0.9,
+        beta_2 = 0.999,
+        epsilon = 1e-7,
+        weight_decay = 0.0,
         exclude_from_weight_decay: Optional[List[str]] = None,
         grad_averaging: bool = False,
         amsgrad: bool = False,

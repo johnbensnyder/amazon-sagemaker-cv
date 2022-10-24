@@ -173,8 +173,9 @@ RUN cd /tmp \
   && rm -rf /tmp/* 
 
 # Install MRCNN codebase
-WORKDIR /workspace && \
-        git clone https://github.com/aws-samples/amazon-sagemaker-cv/ && \
+WORKDIR /workspace
+
+RUN     git clone -b v2 https://github.com/johnbensnyder/amazon-sagemaker-cv/ && \
         cd amazon-sagemaker-cv/pytorch/ && \
         pip install -e . --verbose
 
@@ -194,21 +195,18 @@ RUN pip install ipykernel && \
     python -m ipykernel install --sys-prefix && \
     pip install jupyter_kernel_gateway
 
-# Add PyTorch S3 Plugin
-RUN apt-get update && apt-get install -y curl libcurl4-openssl-dev libssl-dev ca-certificates
-RUN git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp && \
-    cd aws-sdk-cpp/ && \
-    mkdir sdk-build && \
-    cd sdk-build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY="s3;transfer" && \
-    make && \
-    make install && \
-    pip install pybind11 && \
-    export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:/opt/conda/lib/python3.8/site-packages/pybind11 && \
-    cd ../.. && \
-    git clone --recurse-submodules https://github.com/aws/amazon-s3-plugin-for-pytorch && \
-    cd amazon-s3-plugin-for-pytorch && \
-    pip install -v .
+# Add PyTorch S3 Utils
+# RUN apt-get update && apt-get install -y curl libcurl4-openssl-dev libssl-dev ca-certificates
+# RUN git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp && \
+#     cd aws-sdk-cpp/ && \
+#     mkdir sdk-build && \
+#     cd sdk-build && \
+#     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY="s3;transfer" && \
+#     make && \
+#     make install && \
+#     pip install pybind11 && \
+#     export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:/opt/conda/lib/python3.8/site-packages/pybind11 && \
+#     pip install torchdata
     
 # install SMDDP
 ARG SMD_DATA_PARALLEL_URL=https://smdataparallel.s3.amazonaws.com/binary/pytorch/1.12.0/cu113/2022-08-04/smdistributed_dataparallel-1.5.1-cp38-cp38-linux_x86_64.whl

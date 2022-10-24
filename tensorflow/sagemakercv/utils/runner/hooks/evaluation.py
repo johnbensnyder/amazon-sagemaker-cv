@@ -67,13 +67,19 @@ class CocoEvaluator(Hook):
                 box_predictions_mpi_list = self.comm.gather(box_predictions, root=0)
                 mask_predictions_mpi_list = self.comm.gather(mask_predictions, root=0)
                 if dist_utils.MPI_rank() == 0:
-                    self.evaluate_thread = self.thread_pool.submit(self.evaluate,
-                                                                   imgIds_mpi_list,
-                                                                   box_predictions_mpi_list, 
-                                                                   mask_predictions_mpi_list,
-                                                                   runner.logger,
-                                                                   runner.iter,
-                                                                   runner.tensorboard_dir)
+                    #self.evaluate_thread = self.thread_pool.submit(self.evaluate,
+                    #                                               imgIds_mpi_list,
+                    #                                               box_predictions_mpi_list, 
+                    #                                               mask_predictions_mpi_list,
+                    #                                               runner.logger,
+                    #                                               runner.iter,
+                    #                                               runner.tensorboard_dir)
+                    self.evaluate(imgIds_mpi_list,
+                                                                  box_predictions_mpi_list, 
+                                                                  mask_predictions_mpi_list,
+                                                                  runner.logger,
+                                                                  runner.iter,
+                                                                  runner.tensorboard_dir)
                 self.eval_running = False
                 self.comm.Barrier()
                 
@@ -177,11 +183,11 @@ class CocoEvaluator(Hook):
             predictions['segm'] = mask_predictions
 
         logger.info("Running Evaluation for {} images". format(len(set(imgIds))))
-
         stat_dict = evaluation.evaluate_coco_predictions(self.annotations_file,
                                                          predictions.keys(),
                                                          predictions,
                                                          self.verbose)
+        logger.info("Ran Evaluation")
         logger.info(f"{stat_dict}")
         self.log_results(stat_dict, logger)
         if self.tensorboard:

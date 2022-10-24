@@ -21,7 +21,7 @@ from maskrcnn_benchmark.structures.image_list import ImageList, to_image_list
 from maskrcnn_benchmark.structures.bounding_box import BoxList
 from maskrcnn_benchmark.structures.segmentation_mask import SegmentationMask
 from mlperf_logging.mllog import constants
-from scaleoutbridge import init_bridge, ScaleoutBridge as SBridge
+# from scaleoutbridge import init_bridge, ScaleoutBridge as SBridge
 
 from apex import amp
 
@@ -343,13 +343,13 @@ def do_train(
     start_training_time = time.time()
     end = time.time()
 
-    sbridge = init_bridge(rank)
+    # sbridge = init_bridge(rank)
 
     synchronize(training_comm)
     optimizer.zero_grad()
     prefetcher = Prefetcher(data_loader, device, arguments["max_annotations_per_image"]) if not arguments["use_synthetic_input"] else SyntheticDataLoader(device, bs=arguments["images_per_gpu_train"], img_h=800, img_w = 1344, annotations_per_image = 10, max_iter = 65535)
 
-    sbridge.start_epoch_prof()
+    # sbridge.start_epoch_prof()
 
     if distributed:
         params = [p for p in model.parameters() if p.requires_grad]
@@ -370,7 +370,7 @@ def do_train(
         iteration = iteration + 1
         arguments["iteration"] = iteration
 
-        sbridge.start_prof(SBridge.FWD_TIME)
+        # sbridge.start_prof(SBridge.FWD_TIME)
         if images_per_gpu_train == 1:
             if distributed:
                 torch.distributed.barrier(
@@ -383,7 +383,7 @@ def do_train(
 
         losses = sum(loss for loss in loss_dict.values())
 
-        sbridge.stop_start_prof(SBridge.FWD_TIME, SBridge.BWD_TIME)
+        # sbridge.stop_start_prof(SBridge.FWD_TIME, SBridge.BWD_TIME)
         # optimizer.zero_grad()
         # Note: If mixed precision is not used, this ends up doing nothing
         # Otherwise apply loss scaling for mixed-precision recipe
@@ -402,7 +402,7 @@ def do_train(
         # Take advantage of this by loading next input batch before calling step
         prefetcher.prefetch_CPU()
 
-        sbridge.stop_start_prof(SBridge.BWD_TIME, SBridge.OPT_TIME)
+        # sbridge.stop_start_prof(SBridge.BWD_TIME, SBridge.OPT_TIME)
 
         if distributed:
             grad_redux.wait()
@@ -417,7 +417,7 @@ def do_train(
         optimizer.step(overflow_buf)  # This will sync
         prefetcher.prefetch_GPU()
 
-        sbridge.stop_prof(SBridge.OPT_TIME)
+        # sbridge.stop_prof(SBridge.OPT_TIME)
         will_report_this_iteration = iteration % 50 == 0 or iteration == max_iter
 
         # reduce losses over all GPUs for logging purposes
@@ -496,21 +496,21 @@ def do_train(
             checkpointer.save("model_final", **arguments)
 
         # per-epoch work (testing)
-        if per_iter_end_callback_fn is not None:
-            # Note: iteration has been incremented previously for
-            # human-readable checkpoint names (i.e. 60000 instead of 59999)
-            # so need to adjust again here
-            early_exit, sbridge = per_iter_end_callback_fn(
-                iteration=iteration - 1, sbridge=sbridge
-            )
-            if early_exit:
-                break
+        # if per_iter_end_callback_fn is not None:
+        #     # Note: iteration has been incremented previously for
+        #     # human-readable checkpoint names (i.e. 60000 instead of 59999)
+        #     # so need to adjust again here
+        #     early_exit, sbridge = per_iter_end_callback_fn(
+        #         iteration=iteration - 1, sbridge=sbridge
+        #     )
+        #     if early_exit:
+        #         break
 
     if final_callback_fn is not None and not early_exit:
         if final_callback_fn():
             early_exit = True
 
-    sbridge.stop_epoch_prof()
+    # sbridge.stop_epoch_prof()
     torch.cuda.cudart().cudaProfilerStop()
     total_training_time = time.time() - start_training_time
     total_time_str = str(datetime.timedelta(seconds=total_training_time))

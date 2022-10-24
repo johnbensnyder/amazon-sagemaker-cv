@@ -207,9 +207,10 @@ class Runner(object):
         logging.basicConfig(
             format='%(asctime)s - %(levelname)s - %(message)s', 
             level=level)
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger("tensorflow")
+        logger.setLevel(level)
         # TODO: This is doubling up output
-        logger.addHandler(logging.StreamHandler(sys.stdout))
+        # logger.addHandler(logging.StreamHandler(sys.stdout))
         if log_dir and self.rank == 0:
             filename = '{}.log'.format(self.timestamp)
             log_file = os.path.join(log_dir, filename)
