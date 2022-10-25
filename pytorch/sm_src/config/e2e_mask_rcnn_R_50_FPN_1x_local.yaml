@@ -57,7 +57,7 @@ SOLVER:
   OPTIMIZER: "SGD"
 TEST:
   IMS_PER_BATCH: 48
-PATHS_CATALOG: "/opt/ml/code/pytorch/sm_src/config/paths_catalog_local.py"
+PATHS_CATALOG: "/opt/ml/code/config/paths_catalog_local.py"
 NHWC: True
 EVAL_SEGM_NUMPROCS: 10
 USE_CUDA_GRAPH: True

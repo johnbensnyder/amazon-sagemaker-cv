@@ -81,7 +81,7 @@ class ProfilerCallback(pl.Callback):
         self.step += 1
 
 class SMDebugCallback(pl.Callback):
-    def __init__(self, out_dir='/opt/ml/code/pytorch/smdebugger',
+    def __init__(self, out_dir='/opt/ml/code/smdebugger',
                        log_frequency=10,
                        export_tensorboard=True,
                        tensorboard_dir=None,
@@ -96,6 +96,7 @@ class SMDebugCallback(pl.Callback):
         super().__init__()
         self.__dict__.update(locals())
         if self.out_dir:
+            shutil.rmtree(out_dir, ignore_errors=True)
             assert not Path(self.out_dir).exists()
         self.step = 0
         self.epoch = 0

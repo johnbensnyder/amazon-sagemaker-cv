@@ -1,5 +1,10 @@
 CONTAINER_NAME=mlperf
-IMAGE_NAME=920076894685.dkr.ecr.us-east-1.amazonaws.com/jbsnyder:pytorch-mlperf
+REPO=${1-ecr-pt-repo}
+TAG=pytorch-mlperf
+REGION=${2-us-east-1}
+AWS_ACCOUNT=`aws sts get-caller-identity --region ${REGION} --endpoint-url https://sts.${REGION}.amazonaws.com --query Account --output text`
+IMAGE_NAME=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${REPO}:${TAG}
+
 docker run -d -it --rm --gpus all --name ${CONTAINER_NAME} \
     --net=host --uts=host --ipc=host --security-opt=seccomp=unconfined \
     --ulimit=stack=67108864 --ulimit=memlock=-1 \
