@@ -1,6 +1,6 @@
 MODEL:
   META_ARCHITECTURE: "GeneralizedRCNN"
-  WEIGHT: "/opt/ml/input/data/weights/weights/pt-resnet/resnet50.pkl"
+  WEIGHT: "/opt/ml/input/data/weights/pt-resnet/resnet50.pkl"
   BACKBONE:
     CONV_BODY: "R-50-FPN"
     OUT_CHANNELS: 256
@@ -57,7 +57,7 @@ SOLVER:
   OPTIMIZER: "SGD"
 TEST:
   IMS_PER_BATCH: 48
-PATHS_CATALOG: "/opt/ml/code/pytorch/config/paths_catalog_local.py"
+PATHS_CATALOG: "/opt/ml/code/pytorch/sm_src/config/paths_catalog_local.py"
 NHWC: True
 EVAL_SEGM_NUMPROCS: 10
 USE_CUDA_GRAPH: True
