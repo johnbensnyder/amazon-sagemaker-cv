@@ -361,18 +361,18 @@ class RPNPostProcessor(torch.nn.Module):
         keep = keep.permute(1, 0, 2)
         objectness_gen = objectness_gen.permute(1, 0, 2)
         proposals_gen = proposals_gen.permute(1, 0, 2, 3)
+        # split batched results back into boxlists
+        inf_keep = keep.split(1)
+        inf_objectness_gen = objectness_gen.split(1)
+        inf_proposals_gen = proposals_gen.split(1)
+        boxlists=[]
+        for i in range(N):
+            boxlist = BoxList(inf_proposals_gen[i][inf_keep[i]], image_shapes[i], mode="xyxy")
+            boxlist.add_field("objectness", inf_objectness_gen[i][inf_keep[i]])
+            boxlists.append(boxlist)
+        if num_fmaps > 1:
+            boxlists = self.select_over_all_levels(boxlists)
         if not self.training:
-            # split batched results back into boxlists
-            keep = keep.split(1)
-            objectness_gen = objectness_gen.split(1)
-            proposals_gen = proposals_gen.split(1)
-            boxlists=[]
-            for i in range(N):
-                boxlist = BoxList(proposals_gen[i][keep[i]], image_shapes[i], mode="xyxy")
-                boxlist.add_field("objectness", objectness_gen[i][keep[i]])
-                boxlists.append(boxlist)
-            if num_fmaps > 1:
-                boxlists = self.select_over_all_levels(boxlists)
             return boxlists
 
         if self.per_image_search: # TO-DO: aren't per image and per batch search the same when N == 1
@@ -416,7 +416,7 @@ class RPNPostProcessor(torch.nn.Module):
         target_bboxes, target_objectness, _, _ = targets
         proposals = torch.cat([proposals, target_bboxes], dim=1)
         objectness = torch.cat([objectness, target_objectness], dim=1)
-        return [proposals, objectness, image_shapes]
+        return [proposals, objectness, image_shapes], boxlists
 
 
 

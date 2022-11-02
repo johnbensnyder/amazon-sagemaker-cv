@@ -100,7 +100,7 @@ class ROIMaskHead(torch.nn.Module):
 
         loss_mask = self.loss_evaluator(proposals, mask_logits.float(), targets, weights, scale)
 
-        return None if syncfree else x, all_proposals, dict(loss_mask=loss_mask)
+        return None if syncfree else x, all_proposals, mask_logits, dict(loss_mask=loss_mask)
 
 
 def build_roi_mask_head(cfg):

@@ -5,7 +5,7 @@ import gc
 import random
 from time import time
 import argparse
-sys.path.append('/workspace/maskrcnn/')
+#sys.path.append('/workspace/maskrcnn/')
 import numpy as np
 import torch
 import pytorch_lightning as pl
@@ -17,7 +17,7 @@ try:
 except:
     pass
 
-from callbacks import PlSageMakerLogger, ProfilerCallback, SMDebugCallback
+from lightning_mrcnn.callbacks import CheckpointEveryNSteps, COCOEvaluator, PlSageMakerLogger, ProfilerCallback, SMDebugCallback
 from maskrcnn_benchmark.utils.comm import (synchronize, 
                                            get_rank, 
                                            is_main_process, 
@@ -39,6 +39,8 @@ torch._C._jit_override_can_fuse_on_gpu(False)
 
 num_gpus = int(os.environ.get("WORLD_SIZE", 1))
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
+#num_gpus = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 1))
+#local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
 distributed = num_gpus > 1
 
 def parse_args():
@@ -91,8 +93,8 @@ def main(config_file, dist):
 
     model = MaskRCNN(cfg, seed=master_seed, random_number_generator=random_number_generator)
     
-    callbacks = []
-    callbacks.append(SMDebugCallback(out_dir='/opt/ml/code/pytorch/smdebugger/'))
+    callbacks = [CheckpointEveryNSteps('/opt/ml/code/checkpoints'), COCOEvaluator(), PlSageMakerLogger(), 
+                 SMDebugCallback(out_dir='/opt/ml/code/smdebugger/')]
     
     trainer_params = {'strategy': MLPerfStrategy(cfg),
                       'callbacks': callbacks}

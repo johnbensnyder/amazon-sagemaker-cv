@@ -7,8 +7,8 @@ import torch
 import torch.distributed as dist
 import pytorch_lightning as pl
 
-from optimizer import make_novograd_optimizer
-from scheduler import make_cosine_lr_scheduler
+from lightning_mrcnn.optimizer import make_novograd_optimizer
+from lightning_mrcnn.scheduler import make_cosine_lr_scheduler
 from config.defaults import _C as cfg
 from maskrcnn_benchmark.data import make_data_loader
 from maskrcnn_benchmark.data.datasets.coco import HybridDataLoader3
@@ -22,15 +22,13 @@ from maskrcnn_benchmark.utils.comm import (synchronize,
 from maskrcnn_benchmark.solver import make_optimizer
 from maskrcnn_benchmark.solver import make_lr_scheduler
 from maskrcnn_benchmark.engine.trainer import Prefetcher
-from fp16_optimizer import FP16_Optimizer
+from lightning_mrcnn.fp16_optimizer import FP16_Optimizer
 from apex import amp
 from apex.multi_tensor_apply import multi_tensor_applier
 import apex_C, amp_C
 import apex
 from apex.parallel import DistributedDataParallel as DDP
-from cuda_graph import build_graph
-from maskrcnn_benchmark.engine.tester import test
-from coco_eval import mlperf_test_early_exit
+from lightning_mrcnn.cuda_graph import build_graph
 
 import smdebug.pytorch as smd
 from smdebug.core.reduction_config import ReductionConfig
@@ -138,29 +136,6 @@ class MaskRCNN(pl.LightningModule):
         # Setup MLPerf evaluation
         self.iters_per_epoch = 118287//self.cfg.SOLVER.IMS_PER_BATCH #17500 
         self._iter = 0
-        self.per_iter_callback_fn = functools.partial(mlperf_test_early_exit,
-                                                iters_per_epoch=self.iters_per_epoch,
-                                                tester=functools.partial(test, cfg=self.cfg, shapes=self.shapes),
-                                                model=self.model,
-                                                distributed=self.distributed,
-                                                min_bbox_map=self.cfg.MLPERF.MIN_BBOX_MAP,
-                                                min_segm_map=self.cfg.MLPERF.MIN_SEGM_MAP,
-                                                world_size=self.world_size)
-        # self.create_debugger_hook()
-            
-    def create_debugger_hook(self):
-        if Path(DEFAULT_CONFIG_FILE_PATH).exists():
-            self.hook = smd.Hook.create_from_json_file()
-        else:
-            self.hook = smd.Hook(out_dir='/opt/ml/code/pytorch/smdebugger',
-                                 export_tensorboard=True,
-                                 reduction_config=ReductionConfig(['mean']),
-                                 save_config=SaveConfig(save_interval=25),
-                                 include_regex=None,
-                                 include_collections=[CollectionKeys.LOSSES, CollectionKeys.WEIGHTS],
-                                 save_all=False,
-                                 include_workers="one")
-            self.hook.register_module(self.model)
     
     def configure_optimizers(self):
         #self.optimizer.zero_grad()
@@ -212,22 +187,9 @@ class MaskRCNN(pl.LightningModule):
         return reduced_losses
     
     def training_step(self, batch, batch_idx):
-        '''if self.distributed and self._iter%self.iters_per_epoch==0:
-            self.optimizer.zero_grad()
-            # master rank broadcasts parameters
-            params = list(self.model.parameters())
-            flat_params = apex_C.flatten(params)
-            torch.distributed.broadcast(flat_params, 0)
-            overflow_buf = torch.zeros([1], dtype=torch.int32, device='cuda')
-            multi_tensor_applier(
-                    amp_C.multi_tensor_scale,
-                    overflow_buf,
-                    [apex_C.unflatten(flat_params, params), params],
-                    1.0)'''
-        self.per_iter_callback_fn(self._iter)
-        images, targets = batch
-        loss_dict = self.model(images, targets)
-        losses = sum(loss for loss in loss_dict.values())
+        self.images, self.targets = batch
+        self.loss_dict, self.detections = self.model(self.images, self.targets)
+        losses = sum(loss for loss in self.loss_dict.values())
         self.optimizer.backward(losses)
         if self.distributed:
             # gradient reduction
@@ -260,8 +222,8 @@ class MaskRCNN(pl.LightningModule):
         self.optimizer.zero_grad()
         self.scheduler.step()
         self.log("train_loss", losses, on_step=True, on_epoch=True, prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
-        for i,j in loss_dict.items():
+        for i,j in self.loss_dict.items():
             self.log(i, j, on_step=True, on_epoch=True, prog_bar=False, logger=True, rank_zero_only=False, sync_dist=True)
         self._iter += 1
-        return loss_dict
+        return self.loss_dict
         

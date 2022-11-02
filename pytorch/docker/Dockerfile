@@ -164,13 +164,6 @@ RUN pip install --no-cache-dir -U \
     "sagemaker>=2,<3" \
     sagemaker-experiments==0.* \
     sagemaker-pytorch-training
-    
-# Install smdebug from souce
-RUN cd /tmp \
-  && git clone https://github.com/awslabs/sagemaker-debugger \
-  && cd sagemaker-debugger \
-  && python setup.py install \
-  && rm -rf /tmp/* 
 
 # Install MRCNN codebase
 WORKDIR /workspace
@@ -214,6 +207,13 @@ RUN SMDATAPARALLEL_PT=1 pip install --no-cache-dir ${SMD_DATA_PARALLEL_URL}
 
 # install pt lightning
 RUN pip install pytorch-lightning lightning-bolts
+
+# Install smdebug from souce
+RUN cd /tmp \
+  && git clone -b datatype https://github.com/johnbensnyder/sagemaker-debugger \
+  && cd sagemaker-debugger \
+  && python setup.py install \
+  && rm -rf /tmp/sagemaker-debugger
     
 RUN chmod +x /usr/local/bin/start_with_right_hostname.sh
 

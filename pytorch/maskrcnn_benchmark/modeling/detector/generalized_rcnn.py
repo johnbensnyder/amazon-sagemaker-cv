@@ -61,7 +61,7 @@ class Combined_RPN_ROI(nn.Module):
                 batched_anchor_data = [anchor_boxes, anchor_visibility, [tuple(image_size_wh) for image_size_wh in images.image_sizes_wh]]
                 self.stream1.wait_stream(current_stream)
                 with torch.no_grad():
-                    proposals = self.rpn.box_selector_train(
+                    proposals, boxlists = self.rpn.box_selector_train(
                         batched_anchor_data, objectness, rpn_box_regression, images.image_sizes_tensor, targets
                     )
                     detections = self.roi_heads.box.loss_evaluator.subsample(proposals, targets)
@@ -87,10 +87,18 @@ class Combined_RPN_ROI(nn.Module):
                         [class_logits.float()], [box_regression.float()]
                     )
                     loss_box = dict(loss_classifier=loss_classifier, loss_box_reg=loss_box_reg)
+                    
+                    #with torch.no_grad():
+                    #    inf_x = self.roi_heads.box.feature_extractor(features, proposals)
+                    #    inf_class_logits, inf_box_regression = self.roi_heads.box.predictor(inf_x)
+                    #
+                    #    output_detections = self.roi_heads.box.post_processor((inf_class_logits, inf_box_regression), boxlists)
+                    output_detections = self.roi_heads.box.post_processor((class_logits, box_regression), detections)
 
                 # mask losses
                 with torch.cuda.stream(self.stream3):
-                    _, _, loss_mask = self.roi_heads.mask(features, detections, targets, syncfree=True)
+                    _, _, mask_logits, loss_mask = self.roi_heads.mask(features, detections, targets, syncfree=True)
+                    # output_detections = self.roi_heads.mask.post_processor(mask_logits, output_detections)
 
                 current_stream.wait_stream(self.stream1)
                 current_stream.wait_stream(self.stream2)
@@ -105,7 +113,7 @@ class Combined_RPN_ROI(nn.Module):
                     }
                 losses.update(proposal_losses)
     
-                return losses
+                return losses, output_detections
             else:
                 batched_anchor_data = [anchor_boxes, anchor_visibility, [tuple(image_size_wh) for image_size_wh in images.image_sizes_wh]]
                 proposals = self.rpn.box_selector_test(batched_anchor_data, objectness, rpn_box_regression, images.image_sizes_tensor)

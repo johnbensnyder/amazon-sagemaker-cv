@@ -1,5 +1,5 @@
 import torch
-from function import graph
+from lightning_mrcnn.function import graph
 
 class GraphedWrapper(torch.nn.Module):
     def __init__(self, model_segment, expected_batch_size_train, graphed_forwards_train, expected_batch_size_test, graphed_forwards_test):

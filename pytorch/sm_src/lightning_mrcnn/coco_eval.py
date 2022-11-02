@@ -1,4 +1,7 @@
+import numpy as np
 import torch
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 from maskrcnn_benchmark.utils.comm import synchronize, get_rank, is_main_process, get_world_size, is_main_evaluation_process
 from maskrcnn_benchmark.utils.async_evaluator import init, get_evaluator, set_epoch_tag, get_tag
@@ -111,3 +114,31 @@ def check_completed_tags(iteration, world_size, dedicated_evalution_ranks=0, eva
         return all_results
 
     return {}
+
+def image_formatter(image, detections):
+    '''
+    Image as a HWC tensor
+    Boxlist detections
+    '''
+    image = image.cpu()
+    image = np.flip(((image-image.min())/255.).double().numpy(), 2)
+    scores = detections.extra_fields['scores'].cpu()
+    labels = detections.extra_fields['labels'].cpu()
+    boxes = detections.bbox.detach().cpu()
+    fig, ax = plt.subplots()
+    ax.imshow(image)
+    if len(scores)==0:
+        pass
+    elif scores.max()>.5:
+        for box, score in zip(boxes, scores):
+            if score>.5:
+                rect = patches.Rectangle((box[0], box[1]), box[2]-box[0], box[3]-box[1], linewidth=1, edgecolor='r', facecolor='none')
+                ax.add_patch(rect)
+    else:
+        for box, score in zip(boxes[:5], scores[:5]):
+            rect = patches.Rectangle((box[0], box[1]), box[2]-box[0], box[3]-box[1], linewidth=1, edgecolor='r', facecolor='none')
+            ax.add_patch(rect) 
+    fig.canvas.draw()
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    return data

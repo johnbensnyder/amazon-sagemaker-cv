@@ -10,5 +10,6 @@ docker run -d -it --rm --gpus all --name ${CONTAINER_NAME} \
     --ulimit=stack=67108864 --ulimit=memlock=-1 \
     -w /opt/ml/code \
     -v /home/ubuntu/data:/opt/ml/input/data \
-    -v /home/ubuntu/amazon-sagemaker-cv/pytorch/sm_src:/opt/ml/code \
+    -v /home/ubuntu/amazon-sagemaker-cv/pytorch:/opt/ml/code \
+    -v /home/ubuntu/sagemaker-debugger:/workspace/sagemaker-debugger \
     ${IMAGE_NAME}
