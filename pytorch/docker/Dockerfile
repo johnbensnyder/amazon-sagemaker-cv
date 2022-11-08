@@ -206,7 +206,7 @@ ARG SMD_DATA_PARALLEL_URL=https://smdataparallel.s3.amazonaws.com/binary/pytorch
 RUN SMDATAPARALLEL_PT=1 pip install --no-cache-dir ${SMD_DATA_PARALLEL_URL}
 
 # install pt lightning
-RUN pip install pytorch-lightning lightning-bolts
+RUN pip install pytorch-lightning==1.7.7 lightning-bolts
 
 # Install smdebug from souce
 RUN cd /tmp \
