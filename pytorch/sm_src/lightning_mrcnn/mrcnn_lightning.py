@@ -88,6 +88,9 @@ class MaskRCNN(pl.LightningModule):
         gc.disable()
         if self.distributed:
             # master rank broadcasts parameters
+            #if self.cfg.SOLVER.OPTIMIZER=="NovoGrad":
+            #    self.model = DDP(self.model, delay_allreduce=True)
+            #else:
             params = list(self.model.parameters())
             flat_params = apex_C.flatten(params)
             torch.distributed.broadcast(flat_params, 0)
@@ -97,7 +100,6 @@ class MaskRCNN(pl.LightningModule):
                     overflow_buf,
                     [apex_C.unflatten(flat_params, params), params],
                     1.0)
-            #self.model = DDP(self.model, delay_allreduce=True)
         self.arguments = {}
         self.arguments["iteration"] = 0
         self.arguments["nhwc"] = self.cfg.NHWC
@@ -123,7 +125,7 @@ class MaskRCNN(pl.LightningModule):
         if self.is_fp16:
             if self.cfg.SOLVER.OPTIMIZER=="NovoGrad":
                 self.optimizer = apex.fp16_utils.fp16_optimizer.FP16_Optimizer(self.optimizer, 
-                                                                            dynamic_loss_scale=True)
+                                                                              dynamic_loss_scale=True)
             else:
                 self.optimizer = FP16_Optimizer(self.optimizer, 
                                            dynamic_loss_scale=True, 
@@ -191,10 +193,10 @@ class MaskRCNN(pl.LightningModule):
         self.loss_dict, self.detections = self.model(self.images, self.targets)
         losses = sum(loss for loss in self.loss_dict.values())
         self.optimizer.backward(losses)
-        if self.distributed:
+        grads = [p.grad for p in self.params]
+        if self.distributed: #and self.cfg.SOLVER.OPTIMIZER!="NovoGrad":
             # gradient reduction
             # grads = [p.grad for p in self.model.parameters() if p.requires_grad]
-            grads = [p.grad for p in self.params]
             flat_grads = apex_C.flatten(grads)
             # print("Rank {} gradient mean before reduce {}".format(self.rank, float(torch.max(flat_grads))))
             grad_redux = torch.distributed.all_reduce(
@@ -202,7 +204,7 @@ class MaskRCNN(pl.LightningModule):
             )
         self.prefetcher.prefetch_CPU()
         # overflow_buf = torch.zeros([1], dtype=torch.int32, device="cuda")
-        if self.distributed:
+        if self.distributed: #and self.cfg.SOLVER.OPTIMIZER!="NovoGrad":
             grad_redux.wait()
             self.overflow_buf.zero_()
             multi_tensor_applier(
@@ -214,10 +216,7 @@ class MaskRCNN(pl.LightningModule):
             # print("Rank {} gradient mean after reduce {}".format(self.rank, float(torch.max(flat_grads))))
         if self.cfg.SOLVER.GRADIENT_CLIPPING > 0.0:
             torch.nn.utils.clip_grad_norm_(grads, self.cfg.SOLVER.GRADIENT_CLIPPING)
-        if self.cfg.SOLVER.OPTIMIZER=="NovoGrad":
-            self.optimizer.step()
-        else:
-            self.optimizer.step(self.overflow_buf)
+        self.optimizer.step()
         self.prefetcher.prefetch_GPU()
         self.optimizer.zero_grad()
         self.scheduler.step()
